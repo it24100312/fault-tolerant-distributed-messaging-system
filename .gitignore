@@ -1,0 +1,41 @@
+# Maven Files
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE Files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+
+# OS Files
+.DS_Store
+Thumbs.db
+.env
+
+# Log Files
+*.log
+logs/
+
+# Generated Files
+.gradle/
+build/
+out/
+
+# Database Files
+*.db
+*.sqlite
+*.mdb
+
+# Test Reports
+coverage/
+junit-reports/
