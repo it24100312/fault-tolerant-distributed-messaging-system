@@ -26,6 +26,7 @@ public class FailureDetector {
     private Map<String, Long> lastHeartbeatTime = new ConcurrentHashMap<>();
     private Map<String, Integer> failureCount = new ConcurrentHashMap<>();
     private Set<String> failedNodes = ConcurrentHashMap.newKeySet();
+    private Map<String, ScheduledFuture<?>> heartbeatTasks = new ConcurrentHashMap<>();
     private ScheduledExecutorService executor;
     private LeaderElection leaderElection;
     
@@ -43,19 +44,29 @@ public class FailureDetector {
      * Start heartbeat monitoring for a node
      */
     public void startHeartbeat(ServerNode node) {
-        // TODO: Implement heartbeat start
-        // 1. Record initial heartbeat time
-        // 2. Start periodic heartbeat task (every HEARTBEAT_INTERVAL_MS)
-        // 3. Track the task for later cancellation
-        
         String nodeId = node.getNodeId();
         lastHeartbeatTime.put(nodeId, System.currentTimeMillis());
         failureCount.put(nodeId, 0);
         
+        // Schedule periodic heartbeat check every HEARTBEAT_INTERVAL_MS
+        ScheduledFuture<?> task = executor.scheduleAtFixedRate(() -> {
+            long timeSinceLastHB = System.currentTimeMillis() - lastHeartbeatTime.getOrDefault(nodeId, System.currentTimeMillis());
+            
+            // If no heartbeat received in HEARTBEAT_TIMEOUT_MS, increment failure counter
+            if (timeSinceLastHB > HEARTBEAT_TIMEOUT_MS) {
+                onHeartbeatMissed(nodeId);
+            }
+        }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        
+        heartbeatTasks.put(nodeId, task);
         logger.info("Started heartbeat monitoring for node: {}", nodeId);
-    }
-    
-    /**
+    }Cancel the scheduled heartbeat task
+        ScheduledFuture<?> task = heartbeatTasks.remove(nodeId);
+        if (task != null) {
+            task.cancel(false);
+        }
+        
+        //
      * Stop heartbeat monitoring for a node
      */
     public void stopHeartbeat(String nodeId) {
@@ -69,10 +80,9 @@ public class FailureDetector {
         logger.info("Stopped heartbeat monitoring for node: {}", nodeId);
     }
     
-    /**
-     * Record successful heartbeat from node
-     */
-    public void onHeartbeatReceived(String nodeId) {
+    /**Update lastHeartbeatTime for this node
+        lastHeartbeatTime.put(nodeId, System.currentTimeMillis());
+        // Reset failure count to 0
         // TODO: Implement heartbeat receive
         // 1. Update lastHeartbeatTime for this node
         // 2. Reset failure count to 0
@@ -91,11 +101,12 @@ public class FailureDetector {
      */
     public boolean isNodeAlive(String nodeId) {
         // TODO: Implement alive check
+        if Never heard from this node
         if (!lastHeartbeatTime.containsKey(nodeId)) {
-            return false;  // Never heard from this node
+            return false;
         }
         
-        long timeSinceLastHB = System.currentTimeMillis() - lastHeartbeatTime.get(nodeId);
+        // Check if recent heartbeat AND not in failed listlong timeSinceLastHB = System.currentTimeMillis() - lastHeartbeatTime.get(nodeId);
         return timeSinceLastHB < HEARTBEAT_TIMEOUT_MS && !failedNodes.contains(nodeId);
     }
     
@@ -103,26 +114,23 @@ public class FailureDetector {
      * Get list of currently failed nodes
      */
     public List<String> getFailedNodes() {
-        // TODO: Implement failed nodes list
+        // Return snapshot of failed nodes (thread-safe)
         return new ArrayList<>(failedNodes);
     }
     
     /**
      * Called when heartbeat is missed
      */
-    public void onHeartbeatMissed(String nodeId) {
-        // TODO: Implement missed heartbeat handling
-        // 1. Increment failure count
-        // 2. If exceeds MAX_FAILURES_BEFORE_DEAD, mark as failed
-        // 3. Trigger re-election if failed node is leader
-        
+    public Increment failure count
         int failures = failureCount.getOrDefault(nodeId, 0) + 1;
         failureCount.put(nodeId, failures);
         
+        // If exceeds MAX_FAILURES_BEFORE_DEAD, mark as failed
         if (failures >= MAX_FAILURES_BEFORE_DEAD) {
             failedNodes.add(nodeId);
-            logger.warn("Node marked as failed: {} ({}  failed heartbeats)", nodeId, failures);
+            logger.warn("Node marked as failed: {} ({} failed heartbeats)", nodeId, failures);
             
+            // Trigger re-election if failed node is
             // Check if failed node was the leader
             ServerNode leader = leaderElection.getCurrentLeader();
             if (leader != null && leader.getNodeId().equals(nodeId)) {
@@ -139,7 +147,13 @@ public class FailureDetector {
         // TODO: Implement shutdown
         executor.shutdown();
         try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+           Cancel all heartbeat tasks
+        for (ScheduledFuture<?> task : heartbeatTasks.values()) {
+            task.cancel(false);
+        }
+        heartbeatTasks.clear();
+        
+        // Shutdown executorination(5, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
             }
         } catch (InterruptedException e) {
