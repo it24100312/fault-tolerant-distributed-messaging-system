@@ -27,7 +27,7 @@ public class ServerNode {
     private Queue<Message> inboundQueue;
     private Queue<Message> outboundQueue;
     private Map<String, ServerNode> peers;
-    private long lastHeartbeat;
+    private volatile long lastHeartbeat;
     
     /**
      * Create a new server node
@@ -104,10 +104,14 @@ public class ServerNode {
      * Check if node is healthy
      */
     public boolean isHealthy() {
-        // TODO: Implement health check
-        // Check: state is READY or SYNCING
-        // Check: lastHeartbeat not too old
-        return state == NodeState.READY || state == NodeState.SYNCING;
+        // Node is healthy if:
+        // 1. State is READY or SYNCING
+        // 2. Last heartbeat was within 6 seconds
+        if (state != NodeState.READY && state != NodeState.SYNCING) {
+            return false;
+        }
+        long timeSinceHB = getTimeSinceLastHeartbeat();
+        return timeSinceHB < 6000;  // 6 seconds threshold
     }
     
     /**
