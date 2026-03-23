@@ -42,6 +42,34 @@ public class ConsensusManager implements ConsensusPort {
         raftConsensus.onHigherTermDiscovered(newTerm);
     }
 
+    public void tick() {
+        if (raftConsensus == null) {
+            return;
+        }
+
+        RaftState state = raftConsensus.getState();
+        switch (state) {
+            case FOLLOWER:
+                raftConsensus.onFollowerTick();
+                break;
+            case CANDIDATE:
+                raftConsensus.onCandidateTick();
+                break;
+            case LEADER:
+                raftConsensus.onLeaderTick();
+                break;
+            default:
+                break;
+        }
+    }
+
+    public void onLeaderFailure(String failedNodeId) {
+        if (raftConsensus == null) {
+            return;
+        }
+        raftConsensus.triggerElectionIfLeaderFailed(failedNodeId);
+    }
+
     @Override
     public void onMessageReplicated(String messageId) {
         // Commit 1: mapping replicated IDs to log commit will be implemented in Commit 3.

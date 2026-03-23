@@ -1,7 +1,8 @@
 package com.ds.messaging.consensus;
 
-import com.ds.messaging.client.Message;
 import java.util.Objects;
+
+import com.ds.messaging.client.Message;
 
 /**
  * Single entry in the Raft replicated log.
