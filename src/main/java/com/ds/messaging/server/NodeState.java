@@ -1,13 +1,13 @@
 package com.ds.messaging.server;
 
 /**
- * Node lifecycle states for cluster membership and health checks.
+ * Represents the state of a server node in the cluster.
  */
 public enum NodeState {
-    STARTING,
-    READY,
-    SYNCING,
+    STARTING,       // Node is initializing
+    READY,          // Node is operational and ready to receive messages
+    SYNCING,        // Node is syncing state with leader
     UNHEALTHY,
-    SHUTTING_DOWN,
-    DEAD
+    SHUTTING_DOWN,  // Node is gracefully shutting down
+    DEAD;           // Node is no longer operational
 }
