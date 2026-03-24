@@ -18,6 +18,14 @@ import java.util.concurrent.*;
  */
 public class ServerNode {
     private static final Logger logger = Logger.getInstance();
+
+    public enum NodeState {
+        STARTING,
+        READY,
+        SYNCING,
+        SHUTTING_DOWN,
+        DEAD
+    }
     
     private String nodeId;
     private String host;

@@ -3,6 +3,8 @@ package com.ds.messaging.server;
 import com.ds.messaging.utils.Logger;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Distributed leader election mechanism.
@@ -22,7 +24,7 @@ public class LeaderElection {
     
     private volatile ServerNode currentLeader;
     private volatile long currentTerm = 0;
-    private Lock electionLock = new ReentrantLock();
+    private final ReentrantLock electionLock = new ReentrantLock();
     private Condition electionComplete = electionLock.newCondition();
     
     // Election timeout and retry parameters
@@ -127,8 +129,4 @@ public class LeaderElection {
         }
     }
     
-    // Helper inner class for simplicity
-    private static class Lock extends ReentrantLock {
-        // Placeholder for actual locking
-    }
 }
