@@ -20,19 +20,17 @@ public class MessagingClient {
     private static final Logger logger = Logger.getInstance();
     
     // Connection state
-    private String clusterId;
+    private final String clusterId;
     private String serverHost;
     private int serverPort;
     private boolean isConnected;
     
     // Message buffers
-    private Queue<Message> receivedMessages;
-    private Map<String, Message> sentMessages;
+    private final Queue<Message> receivedMessages;
+    private final Map<String, Message> sentMessages;
     
     // Connection timeout and retry parameters
-    private static final int CONNECTION_TIMEOUT_MS = 5000;
     private static final int RECEIVE_TIMEOUT_MS = 5000;
-    private static final int MAX_RETRIES = 3;
     
     /**
      * Create a new messaging client with cluster ID

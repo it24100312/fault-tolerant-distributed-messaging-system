@@ -1,13 +1,14 @@
 package com.ds.messaging.consensus;
 
-import com.ds.messaging.client.Message;
+import static org.junit.Assert.*;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import com.ds.messaging.client.Message;
 
 public class RaftConsensusTest {
 

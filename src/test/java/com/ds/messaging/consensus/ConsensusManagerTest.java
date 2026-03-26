@@ -1,10 +1,12 @@
 package com.ds.messaging.consensus;
 
-import com.ds.messaging.client.Message;
+import static org.junit.Assert.*;
+
 import java.util.Collections;
+
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
+import com.ds.messaging.client.Message;
 
 public class ConsensusManagerTest {
 

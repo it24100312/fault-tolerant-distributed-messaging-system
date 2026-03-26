@@ -19,14 +19,13 @@ import java.util.concurrent.*;
 public class ServerNode {
     private static final Logger logger = Logger.getInstance();
     
-    private String nodeId;
-    private String host;
-    private int port;
+    private final String nodeId;
+    private final String host;
+    private final int port;
     private NodeState state;
     
-    private Queue<Message> inboundQueue;
-    private Queue<Message> outboundQueue;
-    private Map<String, ServerNode> peers;
+    private final Queue<Message> inboundQueue;
+    private final Queue<Message> outboundQueue;
     private volatile long lastHeartbeat;
     
     /**
@@ -40,7 +39,6 @@ public class ServerNode {
         this.state = NodeState.STARTING;
         this.inboundQueue = new ConcurrentLinkedQueue<>();
         this.outboundQueue = new ConcurrentLinkedQueue<>();
-        this.peers = new ConcurrentHashMap<>();
         this.lastHeartbeat = System.currentTimeMillis();
     }
     
