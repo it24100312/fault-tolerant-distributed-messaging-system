@@ -259,6 +259,23 @@ mvn clean verify
 
 ---
 
+## Consensus Regression Suite (Member 4)
+
+Run consensus-specific unit tests:
+
+```bash
+mvn test -Dtest=RaftConsensusTest,ConsensusManagerTest,LeaderElectionTest,FailureDetectorTest
+```
+
+What these tests validate:
+- Election timeout triggers follower-to-candidate transition
+- Candidate becomes leader only after majority votes
+- AppendEntries enforces log consistency and propagates leader commit index
+- Leader commits entries only after quorum acknowledgements
+- Consensus manager applies committed entries in order without skipping indices
+
+---
+
 ## Test Execution Schedule
 
 | Phase | Tests | Duration | Frequency |
