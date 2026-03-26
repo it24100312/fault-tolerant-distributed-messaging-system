@@ -1,12 +1,17 @@
 package com.ds.messaging.consensus;
 
 import com.ds.messaging.replication.ConsensusPort;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Coordinates consensus interactions and offers commit-index access.
  */
 public class ConsensusManager implements ConsensusPort {
     private final RaftConsensus raftConsensus;
+    private int lastAppliedIndex = -1;
+    private final List<LogEntry> appliedEntries = new ArrayList<>();
 
     public ConsensusManager(RaftConsensus raftConsensus) {
         this.raftConsensus = raftConsensus;
@@ -25,7 +30,19 @@ public class ConsensusManager implements ConsensusPort {
     }
 
     public void applyEntries() {
-        // Commit 1: state-machine application loop will be implemented in Commit 3.
+        if (raftConsensus == null) {
+            return;
+        }
+
+        int latestCommitted = raftConsensus.getCommitIndex();
+        for (int idx = lastAppliedIndex + 1; idx <= latestCommitted; idx++) {
+            LogEntry entry = raftConsensus.getEntryByIndex(idx);
+            if (entry == null || !entry.isCommitted()) {
+                break;
+            }
+            appliedEntries.add(entry);
+            lastAppliedIndex = idx;
+        }
     }
 
     public int getCommitIndex() {
@@ -72,6 +89,21 @@ public class ConsensusManager implements ConsensusPort {
 
     @Override
     public void onMessageReplicated(String messageId) {
-        // Commit 1: mapping replicated IDs to log commit will be implemented in Commit 3.
+        if (raftConsensus == null) {
+            return;
+        }
+
+        boolean committed = raftConsensus.commitReplicatedMessage(messageId);
+        if (committed) {
+            applyEntries();
+        }
+    }
+
+    public int getLastAppliedIndex() {
+        return lastAppliedIndex;
+    }
+
+    public List<LogEntry> getAppliedEntriesSnapshot() {
+        return Collections.unmodifiableList(new ArrayList<>(appliedEntries));
     }
 }
