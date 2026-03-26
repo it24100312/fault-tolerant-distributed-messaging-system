@@ -2,15 +2,17 @@ package com.ds.messaging.consensus;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Commit 1 scaffold for Raft consensus state and core API.
+ * Raft consensus state machine with election and commit flow.
  */
 public class RaftConsensus {
     private static final long HEARTBEAT_INTERVAL_MS = 50L;
@@ -26,6 +28,8 @@ public class RaftConsensus {
     private final AtomicInteger commitIndex = new AtomicInteger(-1);
 
     private final List<LogEntry> logEntries = Collections.synchronizedList(new ArrayList<>());
+    private final Map<Integer, Set<String>> replicationAcksByIndex = new HashMap<>();
+    private final Map<String, Integer> messageIndexById = new HashMap<>();
 
     private volatile String currentLeader;
     private volatile String votedFor;
@@ -78,10 +82,12 @@ public class RaftConsensus {
 
         long now = System.currentTimeMillis();
         if (lastLeaderTickMs == 0L || now - lastLeaderTickMs >= HEARTBEAT_INTERVAL_MS) {
-            // Commit 2: heartbeat broadcast transport is integrated in Commit 3.
+            // Transport layer sends heartbeat RPCs; this maintains local leader cadence.
             currentLeader = nodeId;
             lastLeaderTickMs = now;
         }
+
+        advanceCommitFromQuorumAcks();
     }
 
     public synchronized void handleAppendEntriesRPC(AppendEntriesRPC rpc) {
@@ -100,8 +106,17 @@ public class RaftConsensus {
             lastHeartbeatMs = System.currentTimeMillis();
             resetElectionTimeout();
 
+            if (rpc.getPrevLogIndex() >= 0 && !matchesLog(rpc.getPrevLogIndex(), rpc.getPrevLogTerm())) {
+                return;
+            }
+
             for (LogEntry entry : rpc.getEntries()) {
-                appendEntry(entry);
+                mergeReplicatedEntry(entry);
+            }
+
+            if (rpc.getLeaderCommit() >= 0) {
+                int boundedCommitIndex = Math.min(rpc.getLeaderCommit(), getLastLogIndex());
+                commitUpTo(boundedCommitIndex);
             }
         }
     }
@@ -138,7 +153,7 @@ public class RaftConsensus {
         electionStartedAtMs = System.currentTimeMillis();
         resetElectionTimeout();
 
-        // Commit 2: outbound RequestVote RPC transport is integrated later.
+        // Outbound RequestVote transport is implemented by the integration layer.
         onCandidateTick();
     }
 
@@ -176,6 +191,11 @@ public class RaftConsensus {
         state.set(RaftState.LEADER);
         currentLeader = nodeId;
         lastLeaderTickMs = 0L;
+        replicationAcksByIndex.clear();
+        for (LogEntry entry : logEntries) {
+            Set<String> ackSet = replicationAcksByIndex.computeIfAbsent(entry.getIndex(), key -> new HashSet<>());
+            ackSet.add(nodeId);
+        }
     }
 
     public synchronized void becomeFollower(int term) {
@@ -187,21 +207,70 @@ public class RaftConsensus {
         votesGranted.clear();
         lastHeartbeatMs = System.currentTimeMillis();
         resetElectionTimeout();
+        replicationAcksByIndex.clear();
     }
 
     public synchronized void appendEntry(LogEntry entry) {
         if (entry == null) {
             return;
         }
-        logEntries.add(entry);
+
+        mergeReplicatedEntry(entry);
+
+        if (state.get() == RaftState.LEADER) {
+            Set<String> ackSet = replicationAcksByIndex.computeIfAbsent(entry.getIndex(), key -> new HashSet<>());
+            ackSet.add(nodeId);
+        }
     }
 
     public synchronized void commitEntry(LogEntry entry) {
         if (entry == null) {
             return;
         }
-        entry.markCommitted();
-        commitIndex.updateAndGet(existing -> Math.max(existing, entry.getIndex()));
+        commitUpTo(entry.getIndex());
+    }
+
+    public synchronized void registerAppendAck(String followerNodeId, int term, int logIndex, boolean success) {
+        if (!success || followerNodeId == null) {
+            return;
+        }
+
+        if (term > currentTerm.get()) {
+            becomeFollower(term);
+            return;
+        }
+
+        if (state.get() != RaftState.LEADER || term != currentTerm.get()) {
+            return;
+        }
+
+        Set<String> ackSet = replicationAcksByIndex.computeIfAbsent(logIndex, key -> new HashSet<>());
+        ackSet.add(followerNodeId);
+        ackSet.add(nodeId);
+
+        if (hasMajority(ackSet.size())) {
+            commitUpTo(logIndex);
+        }
+    }
+
+    public synchronized boolean commitReplicatedMessage(String messageId) {
+        if (messageId == null) {
+            return false;
+        }
+
+        Integer index = messageIndexById.get(messageId);
+        if (index == null) {
+            return false;
+        }
+
+        Set<String> ackSet = replicationAcksByIndex.computeIfAbsent(index, key -> new HashSet<>());
+        ackSet.add(nodeId);
+
+        if (hasMajority(ackSet.size())) {
+            commitUpTo(index);
+            return true;
+        }
+        return false;
     }
 
     public synchronized void onHigherTermDiscovered(int newTerm) {
@@ -259,6 +328,38 @@ public class RaftConsensus {
         }
     }
 
+    public synchronized List<LogEntry> getCommittedEntriesSnapshot() {
+        List<LogEntry> committed = new ArrayList<>();
+        for (LogEntry entry : logEntries) {
+            if (entry.isCommitted()) {
+                committed.add(entry);
+            }
+        }
+        return committed;
+    }
+
+    public synchronized int getLastLogIndex() {
+        if (logEntries.isEmpty()) {
+            return -1;
+        }
+        return logEntries.get(logEntries.size() - 1).getIndex();
+    }
+
+    public synchronized int getLastLogTerm() {
+        if (logEntries.isEmpty()) {
+            return -1;
+        }
+        return logEntries.get(logEntries.size() - 1).getTerm();
+    }
+
+    public synchronized LogEntry getEntryByIndex(int index) {
+        int position = positionOfIndex(index);
+        if (position < 0) {
+            return null;
+        }
+        return logEntries.get(position);
+    }
+
     private boolean hasMajority(int votes) {
         return votes >= getMajoritySize();
     }
@@ -274,5 +375,72 @@ public class RaftConsensus {
     private long nextElectionTimeoutMs() {
         long range = MAX_ELECTION_TIMEOUT_MS - MIN_ELECTION_TIMEOUT_MS + 1L;
         return MIN_ELECTION_TIMEOUT_MS + random.nextInt((int) range);
+    }
+
+    private void mergeReplicatedEntry(LogEntry entry) {
+        int position = positionOfIndex(entry.getIndex());
+        if (position >= 0) {
+            LogEntry existing = logEntries.get(position);
+            if (existing.getTerm() != entry.getTerm()) {
+                truncateFromPosition(position);
+                logEntries.add(entry);
+            }
+        } else {
+            logEntries.add(entry);
+        }
+
+        if (entry.getData() != null && entry.getData().getMessageId() != null) {
+            messageIndexById.put(entry.getData().getMessageId(), entry.getIndex());
+        }
+    }
+
+    private void commitUpTo(int targetIndex) {
+        if (targetIndex < 0) {
+            return;
+        }
+
+        for (LogEntry entry : logEntries) {
+            if (entry.getIndex() <= targetIndex) {
+                entry.markCommitted();
+            }
+        }
+        commitIndex.updateAndGet(existing -> Math.max(existing, targetIndex));
+    }
+
+    private void advanceCommitFromQuorumAcks() {
+        int currentCommit = commitIndex.get();
+        int lastIndex = getLastLogIndex();
+
+        for (int idx = currentCommit + 1; idx <= lastIndex; idx++) {
+            Set<String> ackSet = replicationAcksByIndex.get(idx);
+            if (ackSet == null || !hasMajority(ackSet.size())) {
+                break;
+            }
+            commitUpTo(idx);
+        }
+    }
+
+    private boolean matchesLog(int index, int term) {
+        LogEntry entry = getEntryByIndex(index);
+        return entry != null && entry.getTerm() == term;
+    }
+
+    private int positionOfIndex(int index) {
+        for (int i = 0; i < logEntries.size(); i++) {
+            if (logEntries.get(i).getIndex() == index) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void truncateFromPosition(int position) {
+        for (int i = logEntries.size() - 1; i >= position; i--) {
+            LogEntry removed = logEntries.remove(i);
+            if (removed.getData() != null && removed.getData().getMessageId() != null) {
+                messageIndexById.remove(removed.getData().getMessageId());
+            }
+            replicationAcksByIndex.remove(removed.getIndex());
+        }
     }
 }
