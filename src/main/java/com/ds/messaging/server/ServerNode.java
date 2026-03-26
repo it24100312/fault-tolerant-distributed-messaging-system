@@ -1,9 +1,10 @@
 package com.ds.messaging.server;
 
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
 import com.ds.messaging.client.Message;
 import com.ds.messaging.utils.Logger;
-import java.util.*;
-import java.util.concurrent.*;
 
 /**
  * Represents a single node in the distributed messaging system.

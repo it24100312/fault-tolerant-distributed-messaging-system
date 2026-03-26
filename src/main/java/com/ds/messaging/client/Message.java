@@ -1,7 +1,8 @@
 package com.ds.messaging.client;
 
+import java.util.UUID;
+
 import com.google.gson.Gson;
-import java.util.*;
 
 /**
  * Represents a message in the distributed messaging system.

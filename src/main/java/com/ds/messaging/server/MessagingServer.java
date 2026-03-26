@@ -1,7 +1,5 @@
 package com.ds.messaging.server;
 
-import com.ds.messaging.utils.Config;
-import com.ds.messaging.utils.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +7,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import com.ds.messaging.utils.Config;
+import com.ds.messaging.utils.Logger;
 
 /**
  * Main messaging server that manages a cluster of nodes.
