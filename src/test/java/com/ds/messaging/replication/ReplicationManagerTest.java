@@ -5,12 +5,14 @@ import com.ds.messaging.server.FailureDetector;
 import com.ds.messaging.server.LeaderElection;
 import com.ds.messaging.server.NodeState;
 import com.ds.messaging.server.ServerNode;
+import com.ds.messaging.time.MessageOrderer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -114,6 +116,44 @@ public class ReplicationManagerTest {
         }
 
         pool.shutdownNow();
+        manager.shutdown();
+    }
+
+    @Test
+    public void testReplicationInvokesOrderingBeforeReplicaWrite() {
+        AtomicBoolean observedUntimestampedMessage = new AtomicBoolean(false);
+
+        MessageReplicator checkingReplicator = new MessageReplicator() {
+            @Override
+            public void replicate(Message msg, ServerNode target) {
+                if (msg.getLogicalClock() <= 0L) {
+                    observedUntimestampedMessage.set(true);
+                }
+                super.replicate(msg, target);
+            }
+        };
+
+        MessageOrderer orderer = new MessageOrderer();
+        ReplicationManager manager = new ReplicationManager(
+                null,
+                checkingReplicator,
+                new MessageDeduplicator(),
+                orderer,
+                null);
+
+        List<ServerNode> nodes = List.of(readyNode("n1"), readyNode("n2"), readyNode("n3"));
+        Message first = new Message("client", "first");
+        Message second = new Message("client", "second");
+
+        manager.replicateMessage(first, nodes);
+        manager.replicateMessage(second, nodes);
+
+        Assert.assertFalse("Messages should be timestamped before replication", observedUntimestampedMessage.get());
+        Assert.assertTrue("First message should get logical timestamp", first.getLogicalClock() > 0L);
+        Assert.assertTrue("Second message should get logical timestamp", second.getLogicalClock() > first.getLogicalClock());
+        Assert.assertTrue("First message should reach quorum", manager.isMessageReplicated(first.getMessageId()));
+        Assert.assertTrue("Second message should reach quorum", manager.isMessageReplicated(second.getMessageId()));
+
         manager.shutdown();
     }
 

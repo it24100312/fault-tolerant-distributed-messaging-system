@@ -6,8 +6,15 @@ import static org.junit.Assert.assertTrue;
 
 import com.ds.messaging.client.Message;
 import com.ds.messaging.server.ServerNode;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
 public class MessageOrdererTest {
@@ -69,5 +76,54 @@ public class MessageOrdererTest {
 
         assertTrue(orderer.orderMessages(null).isEmpty());
         assertTrue(orderer.orderMessages(Arrays.asList()).isEmpty());
+    }
+
+    @Test
+    public void testConcurrentTimestampAssignmentDoesNotDeadlockAndStaysUnique() throws Exception {
+        MessageOrderer orderer = new MessageOrderer();
+        int totalMessages = 200;
+
+        CountDownLatch latch = new CountDownLatch(totalMessages);
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        Set<Long> assignedClocks = ConcurrentHashMap.newKeySet();
+
+        for (int i = 0; i < totalMessages; i++) {
+            final int idx = i;
+            pool.submit(() -> {
+                Message msg = new Message("node-" + (idx % 4), "payload-" + idx);
+                orderer.assignTimestamp(msg, null);
+                assignedClocks.add(msg.getLogicalClock());
+                latch.countDown();
+            });
+        }
+
+        assertTrue("Concurrent timestamp assignment should complete", latch.await(3, TimeUnit.SECONDS));
+        assertEquals("Each message should receive a unique logical clock", totalMessages, assignedClocks.size());
+        assertEquals("Logical clock should reflect processed message count", totalMessages, orderer.getLogicalClock());
+
+        pool.shutdownNow();
+    }
+
+    @Test
+    public void testOrderingPerformanceAverageUnderOneMillisecondPerMessage() {
+        MessageOrderer orderer = new MessageOrderer();
+        List<Message> messages = new ArrayList<>();
+
+        for (int i = 0; i < 400; i++) {
+            Message msg = new Message("node-" + (i % 10), "m-" + i);
+            msg.setLogicalClock(400 - i);
+            messages.add(msg);
+        }
+
+        int rounds = 150;
+        long startNs = System.nanoTime();
+        for (int i = 0; i < rounds; i++) {
+            orderer.orderMessages(messages);
+        }
+        long elapsedNs = System.nanoTime() - startNs;
+
+        double averageNsPerMessage = (double) elapsedNs / (rounds * messages.size());
+        assertTrue("Average ordering cost should remain below 1ms per message",
+                averageNsPerMessage < 1_000_000.0);
     }
 }

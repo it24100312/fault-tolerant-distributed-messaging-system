@@ -7,8 +7,13 @@ import com.ds.messaging.server.FailureDetector;
 import com.ds.messaging.server.LeaderElection;
 import com.ds.messaging.server.ServerNode;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -74,10 +79,73 @@ public class ClockSynchronizerTest {
         assertTrue("Periodic sync flag should be enabled", synchronizer.isPeriodicSyncRunning());
     }
 
+    @Test
+    public void testSyncReducesClockSkew() {
+        ServerNode nodeA = readyNode("A");
+        ServerNode nodeB = readyNode("B");
+
+        synchronizer.setLocalBaseTime(1000L);
+        synchronizer.setNodeTime("A", 1600L);
+        synchronizer.setNodeTime("B", 700L);
+
+        List<Long> beforeTimes = Arrays.asList(1000L, 1600L, 700L);
+        long beforeSkew = maxSkew(beforeTimes);
+
+        synchronizer.synchronizeClocks(Arrays.asList(nodeA, nodeB));
+
+        long localAfter = 1000L + synchronizer.getLocalTimeOffset();
+        long nodeAAfter = 1600L + synchronizer.getNodeCorrectionMs("A");
+        long nodeBAfter = 700L + synchronizer.getNodeCorrectionMs("B");
+
+        List<Long> afterTimes = Arrays.asList(localAfter, nodeAAfter, nodeBAfter);
+        long afterSkew = maxSkew(afterTimes);
+
+        assertTrue("Clock skew should reduce after synchronization", afterSkew < beforeSkew);
+        assertEquals("All participants should converge to same cluster time", 0L, afterSkew);
+    }
+
+    @Test
+    public void testConcurrentSynchronizeCallsDoNotDeadlock() throws Exception {
+        ServerNode nodeA = readyNode("A");
+        ServerNode nodeB = readyNode("B");
+
+        synchronizer.setLocalBaseTime(1000L);
+        synchronizer.setNodeTime("A", 1100L);
+        synchronizer.setNodeTime("B", 900L);
+
+        int totalTasks = 80;
+        CountDownLatch latch = new CountDownLatch(totalTasks);
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+
+        for (int i = 0; i < totalTasks; i++) {
+            pool.submit(() -> {
+                synchronizer.synchronizeClocks(Arrays.asList(nodeA, nodeB));
+                latch.countDown();
+            });
+        }
+
+        assertTrue("Concurrent synchronize calls should complete without deadlock",
+                latch.await(3, TimeUnit.SECONDS));
+
+        pool.shutdownNow();
+    }
+
     private ServerNode readyNode(String id) {
         ServerNode node = new ServerNode(id, "localhost", 5000);
         node.initialize();
         return node;
+    }
+
+    private long maxSkew(List<Long> times) {
+        long min = Long.MAX_VALUE;
+        long max = Long.MIN_VALUE;
+
+        for (long value : times) {
+            min = Math.min(min, value);
+            max = Math.max(max, value);
+        }
+
+        return max - min;
     }
 
     private static class TestClockSynchronizer extends ClockSynchronizer {
