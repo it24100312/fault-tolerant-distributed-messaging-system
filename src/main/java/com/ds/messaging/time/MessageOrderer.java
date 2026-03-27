@@ -5,17 +5,26 @@ import com.ds.messaging.replication.OrderingPort;
 import com.ds.messaging.server.ServerNode;
 import com.ds.messaging.utils.Logger;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Assigns and tracks logical timestamps for message ordering.
- *
- * Commit 1 scope: scaffolding + method contracts only.
  */
 public class MessageOrderer implements OrderingPort {
     private static final Logger logger = Logger.getInstance();
+
+    private static final Comparator<Message> TOTAL_ORDER =
+        Comparator.comparingLong(Message::getLogicalClock)
+            .thenComparing(
+                Message::getSenderId,
+                Comparator.nullsLast(String::compareTo))
+            .thenComparingLong(Message::getPhysicalTimestamp)
+            .thenComparing(
+                Message::getMessageId,
+                Comparator.nullsLast(String::compareTo));
 
     private final AtomicLong logicalClock = new AtomicLong(0L);
 
@@ -27,7 +36,8 @@ public class MessageOrderer implements OrderingPort {
             return;
         }
 
-        long assigned = logicalClock.incrementAndGet();
+        long incomingTimestamp = Math.max(0L, msg.getLogicalClock());
+        long assigned = logicalClock.updateAndGet(current -> Math.max(current, incomingTimestamp) + 1L);
         msg.setLogicalClock(assigned);
 
         if (originator != null) {
@@ -49,14 +59,15 @@ public class MessageOrderer implements OrderingPort {
 
     /**
      * Return messages in deterministic order.
-     *
-     * Commit 1 scope: returns input as-is; final ordering logic is added later.
      */
     public List<Message> orderMessages(List<Message> msgList) {
         if (msgList == null || msgList.isEmpty()) {
             return Collections.emptyList();
         }
-        return new ArrayList<>(msgList);
+
+        List<Message> ordered = new ArrayList<>(msgList);
+        ordered.sort(TOTAL_ORDER);
+        return ordered;
     }
 
     /**
