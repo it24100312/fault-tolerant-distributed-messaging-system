@@ -138,7 +138,88 @@ mvn clean package
 
 ### Run Application
 ```bash
-java -jar target/ds-distributed-system-1.0.0.jar
+# Recommended: Maven handles runtime dependencies automatically
+mvn exec:java "-Dexec.mainClass=com.ds.project.Main"
+```
+
+### Run Local Multi-Node Cluster (Ports)
+```bash
+# Build
+mvn clean package
+
+# For direct java run, copy runtime dependency jars first
+mvn -DskipTests dependency:copy-dependencies
+
+# Run using default cluster config (PowerShell-safe classpath)
+# (node1:6001, node2:6002, node3:6003)
+java --class-path "target/classes;target/dependency/*" com.ds.project.Main
+
+# Or pass a custom properties file path
+java --class-path "target/classes;target/dependency/*" com.ds.project.Main path\to\cluster.properties
+```
+
+Default config file: `src/main/resources/application.properties`
+
+Cluster node format in properties:
+`cluster.nodes=node1:localhost:6001,node2:localhost:6002,node3:localhost:6003`
+
+### Runtime Console Commands
+After startup, use the interactive prompt:
+
+```text
+help
+status
+leader
+send <fromNodeId> <toNodeId> <message>
+kill <nodeId>
+recover <nodeId>
+recover <nodeId> <host> <port>
+addnode <nodeId> <host> <port>
+setport <nodeId> <newPort>
+setnodes <count>
+exit
+```
+
+Examples:
+
+```text
+status
+kill node2
+recover node2
+setport node3 6103
+setnodes 5
+send node1 node4 hello-from-node1
+```
+
+### Advanced Web UI Dashboard
+The system now includes a browser dashboard for live tracking and all cluster operations.
+
+1. Start the system:
+
+```bash
+mvn clean package -DskipTests
+mvn -DskipTests dependency:copy-dependencies
+java --class-path "target/classes;target/dependency/*" com.ds.project.Main
+```
+
+2. Open the dashboard:
+
+`http://localhost:8080`
+
+3. What you can do from UI:
+- Live node status table (state, alive, listener, queue sizes)
+- View cluster leader and node count
+- Send messages between nodes
+- Kill and recover nodes
+- Add new nodes
+- Change node port
+- Resize cluster node count
+
+4. UI config (in `src/main/resources/application.properties`):
+
+```properties
+ui.enabled=true
+ui.port=8080
 ```
 
 ---

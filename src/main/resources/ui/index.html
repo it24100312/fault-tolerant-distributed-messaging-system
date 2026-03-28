@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed Cluster Observatory</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <main class="layout">
+    <section class="panel status-strip">
+      <div class="metric-box"><span>Run State</span><strong id="runState">loading...</strong></div>
+      <div class="metric-box"><span>Cluster Size</span><strong id="countState">0</strong></div>
+    </section>
+
+    <section class="panel leader-strip">
+      <div class="metric-box leader-now"><span>Current Leader</span><strong id="leaderNow">none</strong></div>
+      <div class="metric-box"><span>Previous Leader</span><strong id="previousLeader">-</strong></div>
+      <div class="metric-box"><span>Leader Changed At</span><strong id="leaderChangedAt">-</strong></div>
+      <div class="metric-box"><span>Failover Status</span><strong id="failoverStatus">Stable</strong></div>
+    </section>
+
+    <section class="panel control-grid">
+      <article class="control-card">
+        <h3>Initialize Cluster</h3>
+        <form id="initForm" class="stack">
+          <label>Number of Nodes (3-7)</label>
+          <input name="count" type="number" min="3" max="7" value="5" required>
+          <button type="submit">Initialize Cluster</button>
+        </form>
+      </article>
+
+      <article class="control-card">
+        <h3>Send Message</h3>
+        <form id="sendForm" class="stack">
+          <label>Sender Node</label>
+          <input name="fromNodeId" placeholder="node1" required>
+          <label>Receiver Node</label>
+          <input name="toNodeId" placeholder="node2" required>
+          <label>Message Content</label>
+          <input name="message" placeholder="Enter message payload" required>
+          <button type="submit">Send Message</button>
+        </form>
+      </article>
+
+      <article class="control-card">
+        <h3>Kill Node</h3>
+        <form id="killForm" class="stack">
+          <label>Active Nodes</label>
+          <select id="killNodeSelect" name="nodeId"></select>
+          <button type="submit" class="danger">Kill Node</button>
+        </form>
+      </article>
+
+      <article class="control-card">
+        <h3>Recover Node</h3>
+        <form id="recoverForm" class="stack">
+          <label>Failed Nodes</label>
+          <select id="recoverNodeSelect" name="nodeId"></select>
+          <button type="submit">Recover Node</button>
+        </form>
+      </article>
+
+      <article class="control-card">
+        <h3>Run Scenario</h3>
+        <form id="scenarioForm" class="stack">
+          <label>Scenario</label>
+          <select name="scenario" id="scenarioSelect">
+            <option value="replication-test">Replication Test</option>
+            <option value="leader-failure-and-recovery">Leader Failure and Recovery</option>
+            <option value="multiple-failures">Multiple Failures</option>
+            <option value="message-ordering-test">Message Ordering Test</option>
+          </select>
+          <button type="submit">Run Scenario</button>
+        </form>
+      </article>
+    </section>
+
+    <section class="panel split">
+      <div>
+        <h2>Node Status Panel</h2>
+        <div id="nodeCards" class="node-cards"></div>
+      </div>
+      <div>
+        <h2>Consensus and Quorum Panel</h2>
+        <div class="consensus-grid">
+          <div class="metric-box"><span>Current Leader</span><strong id="leaderState">-</strong></div>
+          <div class="metric-box"><span>Election Term</span><strong id="termState">0</strong></div>
+          <div class="metric-box"><span>Healthy Nodes</span><strong id="healthyNodes">0</strong></div>
+          <div class="metric-box"><span>Required Quorum</span><strong id="requiredQuorum">0</strong></div>
+          <div class="metric-box"><span>Quorum Formula</span><strong id="quorumFormula">N/2+1</strong></div>
+          <div class="metric-box"><span>Quorum Status</span><strong id="quorumState">Unknown</strong></div>
+        </div>
+        <div class="insight-card">
+          <h2>How Leader Is Selected</h2>
+          <p id="leaderExplain">Loading election model...</p>
+        </div>
+        <div class="insight-card">
+          <h2>Failover & Recovery Behavior</h2>
+          <p id="failoverExplain">Loading failover behavior...</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Message Replication Panel</h2>
+      <table class="status-table ledger-table">
+        <thead>
+          <tr>
+            <th>Message ID</th>
+            <th>Sender</th>
+            <th>Content</th>
+            <th>Timestamp</th>
+            <th>Logical Time</th>
+            <th>Replication</th>
+            <th>Replica Locations</th>
+            <th>Delivery</th>
+            <th>Ordering</th>
+            <th>Dedup</th>
+          </tr>
+        </thead>
+        <tbody id="replicationBody"></tbody>
+      </table>
+    </section>
+
+    <section class="panel split">
+      <div class="timeline-wrap">
+        <h2>Message Ordering / Time Panel</h2>
+        <div class="metric-box"><span>Current Logical Clock</span><strong id="logicalClock">0</strong></div>
+        <div id="orderingList" class="timeline"></div>
+      </div>
+      <div class="timeline-wrap">
+        <h2>Simulation Output</h2>
+        <div id="timeline" class="timeline"></div>
+      </div>
+    </section>
+
+    <section class="panel scenario-grid">
+      <article>
+        <h2>Replication Test</h2>
+        <p>Send a message and verify it reaches healthy replicas.</p>
+        <button class="scenario-btn" data-scenario="replication-test">Run</button>
+      </article>
+      <article>
+        <h2>Leader Failure and Recovery</h2>
+        <p>Fail current leader, run election, recover failed node.</p>
+        <button class="scenario-btn" data-scenario="leader-failure-and-recovery">Run</button>
+      </article>
+      <article>
+        <h2>Multiple Failures</h2>
+        <p>Trigger quorum pressure and recover to restore availability.</p>
+        <button class="scenario-btn" data-scenario="multiple-failures">Run</button>
+      </article>
+      <article>
+        <h2>Message Ordering Test</h2>
+        <p>Generate sequenced writes and validate logical ordering.</p>
+        <button class="scenario-btn" data-scenario="message-ordering-test">Run</button>
+      </article>
+    </section>
+
+    <section class="panel split">
+      <div>
+        <h2>Architecture / Explanation</h2>
+        <ul class="explain-list">
+          <li><strong>Fault Tolerance:</strong> Nodes can fail and recover while cluster continues with quorum.</li>
+          <li><strong>Replication:</strong> Messages are stored on receiver and replicated to peers.</li>
+          <li><strong>Consensus:</strong> Leader election tracks terms and failover events.</li>
+          <li><strong>Time Handling:</strong> Logical clock tracks ordering across messages.</li>
+          <li><strong>Recovery:</strong> Recovered nodes rejoin and resume replication.</li>
+        </ul>
+        <div class="insight-card">
+          <h2>Storage / Replication Details</h2>
+          <p id="replicationExplain">Loading replication behavior...</p>
+        </div>
+      </div>
+      <div>
+        <h2>System Logs Panel</h2>
+        <div id="log" class="log"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

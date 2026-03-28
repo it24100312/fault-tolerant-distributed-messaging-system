@@ -51,6 +51,13 @@ public class FailureDetector {
         }
 
         ScheduledFuture<?> task = executor.scheduleAtFixedRate(() -> {
+            if (node.getState() != NodeState.DEAD && node.isListenerRunning()) {
+                // In local simulation mode, a running listener means this node is still alive.
+                node.recordHeartbeat();
+                onHeartbeatReceived(nodeId);
+                return;
+            }
+
             long now = System.currentTimeMillis();
             long lastSeen = lastHeartbeatTime.getOrDefault(nodeId, now);
             if (now - lastSeen > HEARTBEAT_TIMEOUT_MS) {
@@ -97,8 +104,9 @@ public class FailureDetector {
             return false;
         }
 
-        long timeSinceLastHeartbeat = System.currentTimeMillis() - lastHeartbeatTime.get(nodeId);
-        return timeSinceLastHeartbeat < HEARTBEAT_TIMEOUT_MS && !failedNodes.contains(nodeId);
+        // In this local simulation, we treat a monitored node as alive until it is
+        // explicitly marked failed by the miss-threshold logic.
+        return !failedNodes.contains(nodeId);
     }
 
     public List<String> getFailedNodes() {
@@ -115,7 +123,6 @@ public class FailureDetector {
 
         if (failures >= MAX_FAILURES_BEFORE_DEAD && failedNodes.add(nodeId)) {
             logger.warn("Node marked as failed: {} ({} failed heartbeats)", nodeId, failures);
-
             if (leaderElection != null) {
                 leaderElection.onLeaderFailure(nodeId);
             }
