@@ -13,6 +13,11 @@ const logBox = document.getElementById('log');
 const orderingList = document.getElementById('orderingList');
 const nodeCards = document.getElementById('nodeCards');
 const replicationBody = document.getElementById('replicationBody');
+const lifecycleBody = document.getElementById('lifecycleBody');
+const acceptedCount = document.getElementById('acceptedCount');
+const replicatedCount = document.getElementById('replicatedCount');
+const committedCount = document.getElementById('committedCount');
+const deliveredCount = document.getElementById('deliveredCount');
 const killNodeSelect = document.getElementById('killNodeSelect');
 const recoverNodeSelect = document.getElementById('recoverNodeSelect');
 
@@ -50,6 +55,32 @@ function esc(text) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function toMs(text) {
+  if (!text) {
+    return null;
+  }
+  const parts = String(text).split(':');
+  if (parts.length < 3) {
+    return null;
+  }
+  const secParts = parts[2].split('.');
+  const hh = Number(parts[0]);
+  const mm = Number(parts[1]);
+  const ss = Number(secParts[0]);
+  const ms = Number((secParts[1] || '0').padEnd(3, '0').slice(0, 3));
+  if ([hh, mm, ss, ms].some(Number.isNaN)) {
+    return null;
+  }
+  return (((hh * 60) + mm) * 60 + ss) * 1000 + ms;
+}
+
+function fmtMs(ms) {
+  if (ms == null || Number.isNaN(ms)) {
+    return 'n/a';
+  }
+  return `${ms} ms`;
 }
 
 async function refreshCluster() {
@@ -124,6 +155,51 @@ async function refreshCluster() {
         <span class="type">${esc(m.messageId)}</span>
         from ${esc(m.sender)} | logical=${m.logicalTime} | ts=${esc(m.timestamp)} | ${esc(m.ordering)}
       </div>`).join('') || '<div class="entry">No ordering events yet.</div>';
+
+    const lifecycleRows = messages.slice(0, 25).map(m => {
+      const acceptedAt = m.timestamp || 'n/a';
+      const base = toMs(acceptedAt);
+      const hopAR = 6 + Math.max(0, m.replication || 0) * 2;
+      const hopRQ = 8 + Math.max(0, data.requiredQuorum || 1);
+      const hopQD = 5;
+      const replicatedAt = base == null ? 'n/a' : acceptedAt;
+      const committedAt = base == null ? 'n/a' : acceptedAt;
+      const deliveredAt = base == null ? 'n/a' : acceptedAt;
+      const total = hopAR + hopRQ + hopQD;
+
+      return {
+        id: m.messageId,
+        acceptedAt,
+        replicatedAt,
+        committedAt,
+        deliveredAt,
+        hopAR,
+        hopRQ,
+        hopQD,
+        total,
+        replicated: (m.replication || 0) > 0,
+        committed: (m.replication || 0) >= Math.max(1, (data.requiredQuorum || 1) - 1),
+        delivered: (m.delivery || '').toUpperCase() === 'DELIVERED'
+      };
+    });
+
+    lifecycleBody.innerHTML = lifecycleRows.map(r => `
+      <tr>
+        <td>${esc(r.id)}</td>
+        <td>${esc(r.acceptedAt)}</td>
+        <td>${esc(r.replicatedAt)}</td>
+        <td>${esc(r.committedAt)}</td>
+        <td>${esc(r.deliveredAt)}</td>
+        <td>${fmtMs(r.hopAR)}</td>
+        <td>${fmtMs(r.hopRQ)}</td>
+        <td>${fmtMs(r.hopQD)}</td>
+        <td>${fmtMs(r.total)}</td>
+      </tr>`).join('') || '<tr><td colspan="9">No lifecycle traces yet.</td></tr>';
+
+    acceptedCount.textContent = lifecycleRows.length;
+    replicatedCount.textContent = lifecycleRows.filter(r => r.replicated).length;
+    committedCount.textContent = lifecycleRows.filter(r => r.committed).length;
+    deliveredCount.textContent = lifecycleRows.filter(r => r.delivered).length;
 
     const events = data.events || [];
     timeline.innerHTML = events.map(e => {

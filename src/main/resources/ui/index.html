@@ -64,7 +64,7 @@
         </form>
       </article>
 
-      <article class="control-card">
+      <article class="control-card scenario-card">
         <h3>Run Scenario</h3>
         <form id="scenarioForm" class="stack">
           <label>Scenario</label>
@@ -138,27 +138,32 @@
       </div>
     </section>
 
-    <section class="panel scenario-grid">
-      <article>
-        <h2>Replication Test</h2>
-        <p>Send a message and verify it reaches healthy replicas.</p>
-        <button class="scenario-btn" data-scenario="replication-test">Run</button>
-      </article>
-      <article>
-        <h2>Leader Failure and Recovery</h2>
-        <p>Fail current leader, run election, recover failed node.</p>
-        <button class="scenario-btn" data-scenario="leader-failure-and-recovery">Run</button>
-      </article>
-      <article>
-        <h2>Multiple Failures</h2>
-        <p>Trigger quorum pressure and recover to restore availability.</p>
-        <button class="scenario-btn" data-scenario="multiple-failures">Run</button>
-      </article>
-      <article>
-        <h2>Message Ordering Test</h2>
-        <p>Generate sequenced writes and validate logical ordering.</p>
-        <button class="scenario-btn" data-scenario="message-ordering-test">Run</button>
-      </article>
+    <section class="panel lifecycle-panel">
+      <div class="lifecycle-header">
+        <h2>Message Lifecycle Trace</h2>
+        <div class="lifecycle-metrics">
+          <div class="metric-box"><span>Accepted</span><strong id="acceptedCount">0</strong></div>
+          <div class="metric-box"><span>Replicated</span><strong id="replicatedCount">0</strong></div>
+          <div class="metric-box"><span>Quorum Committed</span><strong id="committedCount">0</strong></div>
+          <div class="metric-box"><span>Delivered</span><strong id="deliveredCount">0</strong></div>
+        </div>
+      </div>
+      <table class="status-table lifecycle-table">
+        <thead>
+          <tr>
+            <th>Message ID</th>
+            <th>Accepted</th>
+            <th>Replicated</th>
+            <th>Quorum Committed</th>
+            <th>Delivered</th>
+            <th>Hop Latency (A->R)</th>
+            <th>Hop Latency (R->Q)</th>
+            <th>Hop Latency (Q->D)</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="lifecycleBody"></tbody>
+      </table>
     </section>
 
     <section class="panel split">

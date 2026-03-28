@@ -290,6 +290,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .control-card {
@@ -305,6 +306,10 @@ h2 {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #8ad8ff;
+}
+
+.scenario-card {
+  align-self: start;
 }
 
 label {
@@ -345,6 +350,27 @@ select:focus {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.lifecycle-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.lifecycle-header {
+  display: grid;
+  gap: 10px;
+}
+
+.lifecycle-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lifecycle-table td,
+.lifecycle-table th {
+  white-space: nowrap;
 }
 
 .scenario-grid article {
@@ -481,6 +507,7 @@ button.danger {
 
   .control-grid,
   .scenario-grid,
+  .lifecycle-metrics,
   .node-cards,
   .consensus-grid,
   .status-strip,
