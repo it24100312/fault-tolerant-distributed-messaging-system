@@ -1,9 +1,10 @@
 package com.ds.messaging.server;
 
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
 import com.ds.messaging.client.Message;
 import com.ds.messaging.utils.Logger;
-import java.util.*;
-import java.util.concurrent.*;
 
 /**
  * Represents a single node in the distributed messaging system.
@@ -19,15 +20,14 @@ import java.util.concurrent.*;
 public class ServerNode {
     private static final Logger logger = Logger.getInstance();
     
-    private String nodeId;
-    private String host;
-    private int port;
+    private final String nodeId;
+    private final String host;
+    private final int port;
     private NodeState state;
     
-    private Queue<Message> inboundQueue;
-    private Queue<Message> outboundQueue;
-    private Map<String, ServerNode> peers;
-    private long lastHeartbeat;
+    private final Queue<Message> inboundQueue;
+    private final Queue<Message> outboundQueue;
+    private volatile long lastHeartbeat;
     
     /**
      * Create a new server node
@@ -40,7 +40,6 @@ public class ServerNode {
         this.state = NodeState.STARTING;
         this.inboundQueue = new ConcurrentLinkedQueue<>();
         this.outboundQueue = new ConcurrentLinkedQueue<>();
-        this.peers = new ConcurrentHashMap<>();
         this.lastHeartbeat = System.currentTimeMillis();
     }
     
@@ -104,10 +103,14 @@ public class ServerNode {
      * Check if node is healthy
      */
     public boolean isHealthy() {
-        // TODO: Implement health check
-        // Check: state is READY or SYNCING
-        // Check: lastHeartbeat not too old
-        return state == NodeState.READY || state == NodeState.SYNCING;
+        // Node is healthy if:
+        // 1. State is READY or SYNCING
+        // 2. Last heartbeat was within 6 seconds
+        if (state != NodeState.READY && state != NodeState.SYNCING) {
+            return false;
+        }
+        long timeSinceHB = getTimeSinceLastHeartbeat();
+        return timeSinceHB < 6000;  // 6 seconds threshold
     }
     
     /**

@@ -1,7 +1,6 @@
 package com.ds.messaging.utils;
 
 import org.slf4j.LoggerFactory;
-import java.util.*;
 
 /**
  * Utility wrapper around SLF4J for structured logging.
@@ -9,8 +8,6 @@ import java.util.*;
  * TODO: Implement logging methods
  */
 public class Logger {
-    private static final Map<String, org.slf4j.Logger> loggers = new HashMap<>();
-    
     /**
      * Get logger instance for a class
      */
@@ -20,7 +17,7 @@ public class Logger {
         return new Logger(slf4jLogger);
     }
     
-    private org.slf4j.Logger slf4jLogger;
+    private final org.slf4j.Logger slf4jLogger;
     
     public Logger(org.slf4j.Logger slf4jLogger) {
         this.slf4jLogger = slf4jLogger;

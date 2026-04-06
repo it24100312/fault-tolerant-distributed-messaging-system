@@ -1,7 +1,8 @@
 package com.ds.messaging.client;
 
+import java.util.UUID;
+
 import com.google.gson.Gson;
-import java.util.*;
 
 /**
  * Represents a message in the distributed messaging system.
@@ -17,10 +18,10 @@ import java.util.*;
 public class Message {
     private static final Gson gson = new Gson();
     
-    private String messageId;
-    private String senderId;
-    private String content;
-    private long physicalTimestamp;  // Real world time
+    private final String messageId;
+    private final String senderId;
+    private final String content;
+    private final long physicalTimestamp;  // Real world time
     private long logicalClock;       // Lamport/Logical clock
     private int[] vectorClock;       // Vector clock for causality
     

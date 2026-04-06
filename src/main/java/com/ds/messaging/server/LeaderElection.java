@@ -1,134 +1,138 @@
 package com.ds.messaging.server;
 
 import com.ds.messaging.utils.Logger;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Distributed leader election mechanism.
- * 
- * From LAB 6: Implement a protocol where nodes elect a single leader/coordinator.
- * 
- * Responsibilities:
- * - Elect a unique leader from candidate nodes
- * - Handle leader failure and re-election
- * - Ensure safety (at most one leader) and liveness (always elect a leader)
- * - Track current leader and term/generation
- * 
- * TODO: Implement leader election algorithm (e.g., Bully Algorithm or Ring Algorithm)
+ *
+ * Commit 2 scope:
+ * - Deterministic leader selection from healthy candidates
+ * - Re-election trigger on leader failure
+ * - Term tracking and leader liveness checks
  */
 public class LeaderElection {
     private static final Logger logger = Logger.getInstance();
-    
+
     private volatile ServerNode currentLeader;
-    private volatile long currentTerm = 0;
-    private Lock electionLock = new ReentrantLock();
-    private Condition electionComplete = electionLock.newCondition();
-    
-    // Election timeout and retry parameters
-    private static final long ELECTION_TIMEOUT_MS = 5000;
-    private static final int MAX_ELECTION_ROUNDS = 3;
-    
+    private volatile long currentTerm = 0L;
+
+    private final ReentrantLock electionLock = new ReentrantLock();
+    private final Condition electionComplete = electionLock.newCondition();
+
     /**
-     * Start leader election among given candidates
-     * 
-     * @param candidates List of candidate nodes
-     * @return Elected leader, or null if election fails
+     * Start an election among candidates and choose the highest nodeId among healthy nodes.
      */
     public ServerNode startElection(List<ServerNode> candidates) {
-        // TODO: Implement election algorithm
-        // 
-        // Example approach (Bully Algorithm):
-        // 1. For each node, try to claim leadership based on node ID/priority
-        // 2. Candidates with higher priority take precedence
-        // 3. Send election messages to all lower-priority nodes
-        // 4. If no one objects, current node becomes leader
-        // 5. Announce new leader to all
-        //
-        // Safety checks:
-        // - Only elect from healthy (ready) nodes
-        // - Increment currentTerm on each re-election
-        // - Ensure only one leader exists
-        
         electionLock.lock();
         try {
-            logger.info("Starting leader election among {} candidates", candidates.size());
             currentTerm++;
-            
-            ServerNode newLeader = null;
-            // TODO: Implement the actual election logic here
-            
-            if (newLeader != null) {
-                currentLeader = newLeader;
-                logger.info("New leader elected: {} (term: {})", newLeader.getNodeId(), currentTerm);
-                electionComplete.signalAll();
+
+            if (candidates == null || candidates.isEmpty()) {
+                currentLeader = null;
+                logger.warn("No candidates provided for election in term {}", currentTerm);
+                return null;
             }
-            return newLeader;
+
+            List<ServerNode> healthyCandidates = new ArrayList<>();
+            for (ServerNode candidate : candidates) {
+                if (candidate != null && candidate.isHealthy()) {
+                    healthyCandidates.add(candidate);
+                }
+            }
+
+            if (healthyCandidates.isEmpty()) {
+                currentLeader = null;
+                logger.warn("No healthy candidates available for election in term {}", currentTerm);
+                return null;
+            }
+
+            healthyCandidates.sort(Comparator.comparing(ServerNode::getNodeId).reversed());
+            currentLeader = healthyCandidates.get(0);
+            electionComplete.signalAll();
+
+            logger.info("Leader elected: {} (term: {})", currentLeader.getNodeId(), currentTerm);
+            return currentLeader;
         } finally {
             electionLock.unlock();
         }
     }
-    
+
     /**
-     * Get current cluster leader
+     * Trigger re-election by clearing leader and incrementing term.
      */
+    public void triggerReelection() {
+        electionLock.lock();
+        try {
+            currentLeader = null;
+            currentTerm++;
+            electionComplete.signalAll();
+            logger.warn("Re-election triggered (term: {})", currentTerm);
+        } finally {
+            electionLock.unlock();
+        }
+    }
+
+    /**
+     * Called by failure detector when a leader is suspected failed.
+     */
+    public void onLeaderFailure(String nodeId) {
+        if (nodeId == null) {
+            return;
+        }
+
+        electionLock.lock();
+        try {
+            if (currentLeader != null && nodeId.equals(currentLeader.getNodeId())) {
+                currentLeader = null;
+                currentTerm++;
+                electionComplete.signalAll();
+                logger.warn("Leader failure detected for node {}. New term {}", nodeId, currentTerm);
+            }
+        } finally {
+            electionLock.unlock();
+        }
+    }
+
     public ServerNode getCurrentLeader() {
         return currentLeader;
     }
-    
-    /**
-     * Check if current leader is alive and healthy
-     */
+
     public boolean isLeaderAlive() {
-        // TODO: Implement leader health check
-        if (currentLeader == null) return false;
-        return currentLeader.isHealthy();
+        ServerNode leader = currentLeader;
+        return leader != null && leader.isHealthy();
     }
-    
-    /**
-     * Manually trigger re-election (e.g., when leader dies)
-     */
-    public void triggerReelection() {
-        // TODO: Implement re-election trigger
-        // 1. Clear current leader
-        // 2. Start new election round
-        currentLeader = null;
-        logger.warn("Re-election triggered!");
-    }
-    
-    /**
-     * Set the leader explicitly (for consensus integration)
-     */
+
     public void setLeader(ServerNode leader) {
-        // TODO: Implement leader assignment
-        this.currentLeader = leader;
-        logger.info("Leader set to: {}", leader.getNodeId());
+        electionLock.lock();
+        try {
+            currentLeader = leader;
+            if (leader != null) {
+                logger.info("Leader set to: {}", leader.getNodeId());
+                electionComplete.signalAll();
+            }
+        } finally {
+            electionLock.unlock();
+        }
     }
-    
-    /**
-     * Get current election term/generation
-     */
+
     public long getCurrentTerm() {
         return currentTerm;
     }
-    
-    /**
-     * Wait for election to complete (with timeout)
-     */
+
     public void waitForLeader(long timeoutMs) throws InterruptedException {
-        // TODO: Implement wait logic
         electionLock.lock();
         try {
-            while (currentLeader == null) {
+            if (currentLeader == null) {
                 electionComplete.await(timeoutMs, TimeUnit.MILLISECONDS);
             }
         } finally {
             electionLock.unlock();
         }
-    }
-    
-    // Helper inner class for simplicity
-    private static class Lock extends ReentrantLock {
-        // Placeholder for actual locking
     }
 }
